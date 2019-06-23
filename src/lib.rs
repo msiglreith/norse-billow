@@ -1,42 +1,66 @@
 /*!
-Allocator for SoA data layout
+Allocator for SoA data layout.
+
+`billow` allows to define a [`BlockLayout`](struct.BlockLayout.html) which encodes
+a SoA data layout. This layout can be used to subdivide user allocated memory blocks
+in a tight and aligned fashion.
+
+## Struct of Arrays
+
+Struct of Arrays (SoA) describes a deinterleaved memory layout of struct fields.
+Each array has the same number of elements. This layout is usually better suited for SIMD operations,
+
+```
++-----+-----+-----+-----
+|  A  |  A  |  A  | ...
++-----+-----+-----+-----
++-------+-------+-------+-----
+|   B   |   B   |   B   | ...
++-------+-------+-------+-----
++---+---+---+-----
+| C | C | C | ...
++---+---+---+-----
+```
 
 ## Examples
+
+Allocating an aligned memory block from the system allocator and define a layout for the
+following struct in SoA layout:
+
+```rust
+type Transform = [[f32; 4]; 4];
+type Velocity = [f32; 3];
+
+struct Block {
+    transforms: &mut [Transform],
+    velocity: &mut [Velocity],
+}
+```
 
 ```rust
 # use norse_billow as billow;
 # use std::alloc::{self, Layout, LayoutErr};
 # use std::ptr::NonNull;
 # fn main() -> Result<(), LayoutErr> {
-
 const NUM_ELEMENTS: usize = 128;
 
-type Transform = [[f32; 4]; 4];
-type Velocity = [f32; 3];
-
-// Build layout for SoA:
-//
-// struct Block {
-//     transforms: &mut [Transform],
-//     velocity: &mut [Velocity],
-// }
+// Define SoA layout.
 let mut layout = billow::BlockLayout::build();
 let transform_id = layout.add::<Transform>();
 let velocity_id = layout.add::<Velocity>();
 let block_layout = layout.finish();
 
-// Allocate memory block for holding `NUM_ELEMENTS` elements.
+// Allocate memory block for holding the elements.
 let layout = block_layout.layout();
 let size = layout.size() * NUM_ELEMENTS;
 let memory = unsafe {
-    alloc::alloc(Layout::from_size_align(
-        size, layout.align()
-    )?)
+    alloc::alloc(Layout::from_size_align(size, layout.align())?)
 };
 
 let block = block_layout.apply(NonNull::new(memory).unwrap(), layout.size() * 128);
 assert_eq!(block.len(), NUM_ELEMENTS);
 
+// Get struct fields.
 let transforms = unsafe { block.as_slice::<Transform>(transform_id) };
 let velocities = unsafe { block.as_slice::<Velocity>(velocity_id) };
 
@@ -52,10 +76,10 @@ use std::ops::Range;
 use std::ptr::NonNull;
 use std::slice;
 
-///
+/// Unique handle for an array field in a layout definition.
 pub type LayoutSlot = usize;
 
-///
+/// Layout builder
 pub struct LayoutBuilder {
     layouts: Vec<(LayoutSlot, Layout)>,
     max_alignment: usize,
@@ -127,7 +151,7 @@ impl LayoutBuilder {
     }
 }
 
-///
+/// SoA layout definition
 pub struct BlockLayout {
     slot_map: IndexMap<LayoutSlot, usize>,
     layout: Layout,
@@ -199,7 +223,7 @@ impl BlockLayout {
     }
 }
 
-///
+/// Laid out memory block
 pub struct Block {
     /// Memory range occupied by the block (offset).
     range: Range<usize>,
