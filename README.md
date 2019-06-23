@@ -1,9 +1,7 @@
 
-<center>
-    <font size=6>billow</font>
-    <br>
-    <font size=2>N O R S E</font>
-</center>
+<font size=6>billow</font>
+<br>
+<font size=2>N O R S E</font>
 
 ---
 
