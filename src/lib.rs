@@ -122,6 +122,18 @@ impl LayoutBuilder {
     }
 
     /// Bake the layout scheme into a finalized block layout.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use norse_billow::BlockLayout;
+    ///
+    /// let block_layout = {
+    ///     let mut layout = BlockLayout::build();
+    ///     layout.add::<[f32; 4]>();
+    ///     layout.finish()
+    /// };
+    /// ```
     pub fn finish(mut self) -> BlockLayout {
         // Sort layouts to match our scheme (descending alignment).
         self.layouts
@@ -152,6 +164,16 @@ impl LayoutBuilder {
 }
 
 /// SoA layout definition
+///
+/// ## Layout
+///
+/// The [`LayoutBuilder`](struct.LayoutBuilder.html) will reorder the components
+/// depending on their alignment to avoid padding. The order is deterministic.
+///
+/// The components will be order by alignment first (descending) and by insertion order
+/// for equal alignments. The resulting block layout will be aligned to the largest
+/// alignment of all components. Due to enforced power-of-two alignments for all layouts
+/// all components will be aligned and tightly packed.
 pub struct BlockLayout {
     slot_map: IndexMap<LayoutSlot, usize>,
     layout: Layout,
@@ -246,13 +268,29 @@ impl Block {
         self.len
     }
 
+    /// Get the raw pointer and len for a component slot.
     ///
+    /// # Unsafe
+    ///
+    /// The type `T` **must** match the type used on `add` for the passed slot.
+    ///
+    /// # Panics
+    ///
+    /// `slot` must be a valid value obtained by the corresponding block layout.
     pub unsafe fn as_raw<T>(&self, slot: LayoutSlot) -> (*mut T, usize) {
         let slice = &self.slices[slot];
         (slice.cast::<T>().as_ptr(), self.len)
     }
 
+    /// Get the mutable slice for a component slot.
     ///
+    /// # Unsafe
+    ///
+    /// The type `T` **must** match the type used on `add` for the passed slot.
+    ///
+    /// # Panics
+    ///
+    /// `slot` must be a valid value obtained by the corresponding block layout.
     pub unsafe fn as_slice<T>(&self, slot: LayoutSlot) -> &mut [T] {
         let slice = &self.slices[slot];
         slice::from_raw_parts_mut(slice.cast::<T>().as_ptr(), self.len)
