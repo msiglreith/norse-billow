@@ -10,7 +10,7 @@ in a tight and aligned fashion.
 Struct of Arrays (SoA) describes a deinterleaved memory layout of struct fields.
 Each array has the same number of elements. This layout is usually better suited for SIMD operations,
 
-```
+```ignore
 +-----+-----+-----+-----
 |  A  |  A  |  A  | ...
 +-----+-----+-----+-----
@@ -31,9 +31,9 @@ following struct in SoA layout:
 type Transform = [[f32; 4]; 4];
 type Velocity = [f32; 3];
 
-struct Block {
-    transforms: &mut [Transform],
-    velocity: &mut [Velocity],
+struct Block<'a> {
+    transforms: &'a mut [Transform],
+    velocity: &'a mut [Velocity],
 }
 ```
 
@@ -41,6 +41,8 @@ struct Block {
 # use norse_billow as billow;
 # use std::alloc::{self, Layout, LayoutErr};
 # use std::ptr::NonNull;
+# type Transform = [[f32; 4]; 4];
+# type Velocity = [f32; 3];
 # fn main() -> Result<(), LayoutErr> {
 const NUM_ELEMENTS: usize = 128;
 
@@ -144,14 +146,14 @@ impl LayoutBuilder {
                     .reverse()
                     .then(slot_a.cmp(slot_b))
             });
-        dbg!(&self.layouts);
+        &self.layouts;
         let slot_map = self
             .layouts
             .iter()
             .enumerate()
             .map(|(i, (slot, _))| (*slot, i))
             .collect();
-        dbg!(&slot_map);
+        &slot_map;
         let sub_layouts = self.layouts.into_iter().map(|(_, layout)| layout).collect();
         let layout = Layout::from_size_align(self.element_size, self.max_alignment).unwrap();
 
@@ -226,7 +228,7 @@ impl BlockLayout {
         let mut offsets = Vec::with_capacity(self.sub_layouts.len());
 
         for layout in &self.sub_layouts {
-            assert_eq!(dbg!(offset) % layout.align(), 0);
+            assert_eq!(offset % layout.align(), 0);
             offsets.push(offset);
             offset += layout.size() * len;
         }
@@ -287,11 +289,12 @@ impl Block {
     /// # Unsafe
     ///
     /// The type `T` **must** match the type used on `add` for the passed slot.
+    /// All values in the resulting slice are undefined!
     ///
     /// # Panics
     ///
     /// `slot` must be a valid value obtained by the corresponding block layout.
-    pub unsafe fn as_slice<T>(&self, slot: LayoutSlot) -> &mut [T] {
+    pub unsafe fn as_slice<T: Copy>(&self, slot: LayoutSlot) -> &mut [T] {
         let slice = &self.slices[slot];
         slice::from_raw_parts_mut(slice.cast::<T>().as_ptr(), self.len)
     }
@@ -322,18 +325,20 @@ mod test {
         let block = layout.apply(NonNull::new(data.as_mut_ptr()).unwrap(), 32);
 
         unsafe {
-            block.as_slice::<Foo>(foo);
+            block.as_raw::<Foo>(foo);
         }
     }
 
     #[test]
     fn ordering() {
+        #[derive(Copy, Clone)]
         struct Small {
             _a: u8,
             _b: u8,
             _c: u8,
         }
 
+        #[derive(Copy, Clone)]
         struct Large {
             _a: f32,
             _b: [u64; 8],
